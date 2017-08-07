@@ -24,11 +24,18 @@ import java.util.List;
  *
  * @author cedric.bodet@tngtech.com
  */
-@View(name = "all", map = "function(doc) { if (doc.type == 'license') emit(null, doc._id) }")
+@View(name = "all", map =
+        "function(doc) {" +
+        "    if (doc.type == 'license') emit(null, doc._id);" +
+        "    if(doc.otherIds.length > 0) {" +
+        "        for( var otherId in doc.otherIds) {" +
+        "            emit(null, otherId);" +
+        "        }" +
+        "    }" +
+        " }")
 public class LicenseRepository extends SummaryAwareRepository<License> {
 
     private static final String BY_NAME_VIEW = "function(doc) { if(doc.type == 'license') { emit(doc.fullname, doc) } }";
-    private static final String BY_SHORT_NAME_VIEW = "function(doc) { if(doc.type == 'license') { emit(doc._id, doc) } }";
 
     public LicenseRepository(DatabaseConnector db) {
         super(License.class, db, new LicenseSummary());
@@ -41,12 +48,11 @@ public class LicenseRepository extends SummaryAwareRepository<License> {
         return queryByPrefix("byname", name);
     }
 
-    @View(name = "byshortname", map = BY_SHORT_NAME_VIEW)
     public List<License> searchByShortName(String name) {
-        return queryByPrefix("byshortname", name);
+        return queryByPrefix("all", name);
     }
     public List<License> searchByShortName(List<String> names) {
-        return queryByIds("byshortname", names);
+        return queryByIds("all", names);
     }
 
     public List<License> getLicenseSummary() {
