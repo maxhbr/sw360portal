@@ -102,9 +102,17 @@ struct License {
 	23: optional set<string> riskDatabaseIds,
     25: optional string text,
 
+    50: optional list<string> otherIds,
+
     90: optional DocumentState documentState,
 
 	200: optional map<RequestedAction, bool> permissions
+}
+
+union LicenseRef {
+   1: string licenseId, // reference to a license
+   2: License license, // inplace license
+   3: string shortname, // shortname without reference
 }
 
 service LicenseService {
