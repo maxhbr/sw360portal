@@ -119,6 +119,7 @@ public class PortalConstants {
     public static final String ATTACHMENT_ID = "attachmentId";
     public static final String CONTEXT_TYPE = "context_type";
     public static final String CONTEXT_ID = "context_id";
+    public static final String ATTACHMENT_USAGE_COUNT_MAP = "attachmenUsageCountMap";
 
     //! Specialized keys for projects
     public static final String PROJECT_ID = "projectid";
@@ -127,6 +128,7 @@ public class PortalConstants {
     public static final String ACTUAL_PROJECT = "actual_project";
     public static final String USING_PROJECTS = "usingProjects";
     public static final String USING_COMPONENTS = "usingComponents";
+    public static final String USING_RELEASES = "usingReleases";
     public static final String PROJECT_LIST = "projectList";
     public static final String RELEASE_LIST = "releaseList";
     public static final String PROJECT_SEARCH = "projectSearch";
@@ -188,6 +190,7 @@ public class PortalConstants {
     //! Specialized keys for users
     public static final String CUSTOM_FIELD_PROJECT_GROUP_FILTER = "ProjectGroupFilter";
     public static final String CUSTOM_FIELD_COMPONENTS_VIEW_SIZE = "ComponentsViewSize";
+    public static final String CUSTOM_FIELD_VULNERABILITIES_VIEW_SIZE = "VulnerabilitiesViewSize";
 
     //! Specialized keys for scheduling
     public static final String CVESEARCH_IS_SCHEDULED = "cveSearchIsScheduled";
@@ -224,6 +227,9 @@ public class PortalConstants {
     public static final String CLEARING_STATE_INPROGRESS__CSS = "clearingStateInProgress";
     public static final String CLEARING_STATE_CLOSED__CSS     = "clearingStateClosed";
     public static final String CLEARING_STATE_UNKNOWN__CSS    = "clearingStateUnknown";
+
+    //! Specialized key for the tooltip CSS-class
+    public static final String TOOLTIP_CLASS__CSS = "sw360-tt";
 
     //! Serve resource keywords
 
@@ -265,6 +271,7 @@ public class PortalConstants {
     public static final String DOWNLOAD_LICENSE_INFO = "DownloadLicenseInfo";
     public static final String DOWNLOAD_SOURCE_CODE_BUNDLE = "DownloadSourceCodeBundle";
     public static final String GET_LICENCES_FROM_ATTACHMENT = "GetLicensesFromAttachment";
+    public static final String LOAD_LICENSE_INFO_ATTACHMENT_USAGE = "LoadLicenseInfoAttachmentUsage";
 
     //component actions
     public static final String ADD_VENDOR = "add_vendor";

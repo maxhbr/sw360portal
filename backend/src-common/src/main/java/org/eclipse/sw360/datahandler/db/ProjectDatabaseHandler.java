@@ -11,27 +11,21 @@
 package org.eclipse.sw360.datahandler.db;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.ArrayListMultimap;
-import com.google.common.collect.ListMultimap;
-import com.google.common.collect.Sets;
+import com.google.common.collect.*;
 import org.apache.log4j.Logger;
 import org.eclipse.sw360.components.summary.SummaryType;
 import org.eclipse.sw360.datahandler.businessrules.ReleaseClearingStateSummaryComputer;
-import org.eclipse.sw360.datahandler.common.CommonUtils;
-import org.eclipse.sw360.datahandler.common.Duration;
-import org.eclipse.sw360.datahandler.common.SW360Constants;
-import org.eclipse.sw360.datahandler.common.SW360Utils;
+import org.eclipse.sw360.datahandler.common.*;
 import org.eclipse.sw360.datahandler.couchdb.AttachmentConnector;
 import org.eclipse.sw360.datahandler.couchdb.DatabaseConnector;
 import org.eclipse.sw360.datahandler.entitlement.ProjectModerator;
 import org.eclipse.sw360.datahandler.thrift.*;
-import org.eclipse.sw360.datahandler.thrift.components.Release;
-import org.eclipse.sw360.datahandler.thrift.components.ReleaseClearingStateSummary;
-import org.eclipse.sw360.datahandler.thrift.components.ReleaseLink;
+import org.eclipse.sw360.datahandler.thrift.components.*;
 import org.eclipse.sw360.datahandler.thrift.moderation.ModerationRequest;
 import org.eclipse.sw360.datahandler.thrift.projects.Project;
 import org.eclipse.sw360.datahandler.thrift.projects.ProjectLink;
 import org.eclipse.sw360.datahandler.thrift.projects.ProjectRelationship;
+import org.eclipse.sw360.datahandler.thrift.projects.ProjectWithReleaseRelationTuple;
 import org.eclipse.sw360.datahandler.thrift.users.RequestedAction;
 import org.eclipse.sw360.datahandler.thrift.users.User;
 import org.eclipse.sw360.datahandler.thrift.vulnerabilities.ProjectVulnerabilityRating;
@@ -47,14 +41,10 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
-import static org.eclipse.sw360.datahandler.common.CommonUtils.isInProgressOrPending;
-import static org.eclipse.sw360.datahandler.common.CommonUtils.nullToEmptyList;
-import static org.eclipse.sw360.datahandler.common.CommonUtils.nullToEmptyMap;
+import static org.eclipse.sw360.datahandler.common.CommonUtils.*;
 import static org.eclipse.sw360.datahandler.common.SW360Assert.assertNotNull;
 import static org.eclipse.sw360.datahandler.common.SW360Assert.fail;
-import static org.eclipse.sw360.datahandler.common.SW360Utils.getBUFromOrganisation;
-import static org.eclipse.sw360.datahandler.common.SW360Utils.getCreatedOn;
-import static org.eclipse.sw360.datahandler.common.SW360Utils.printName;
+import static org.eclipse.sw360.datahandler.common.SW360Utils.*;
 import static org.eclipse.sw360.datahandler.permissions.PermissionUtils.makePermission;
 
 /**
@@ -64,7 +54,7 @@ import static org.eclipse.sw360.datahandler.permissions.PermissionUtils.makePerm
  * @author daniele.fognini@tngtech.com
  * @author alex.borodin@evosoft.com
  */
-public class ProjectDatabaseHandler {
+public class ProjectDatabaseHandler extends AttachmentAwareDatabaseHandler {
 
     private static final Logger log = Logger.getLogger(ProjectDatabaseHandler.class);
     private static final int DELETION_SANITY_CHECK_THRESHOLD = 5;
@@ -192,6 +182,7 @@ public class ProjectDatabaseHandler {
             return RequestStatus.FAILED_SANITY_CHECK;
         } else if (makePermission(actual, user).isActionAllowed(RequestedAction.WRITE)) {
             copyImmutableFields(project,actual);
+            project.setAttachments( getAllAttachmentsToKeep(actual.getAttachments(), project.getAttachments()) );
             repository.update(project);
 
             //clean up attachments in database
@@ -282,7 +273,7 @@ public class ProjectDatabaseHandler {
         } else {
             projectMap = preloadLinkedProjects(project, user);
         }
-        final Map<String, Release> releaseMap = preloadLinkedReleases(projectMap, user);
+        final Map<String, Release> releaseMap = preloadLinkedReleases(projectMap);
 
         Deque<String> visitedIds = new ArrayDeque<>();
 
@@ -298,7 +289,7 @@ public class ProjectDatabaseHandler {
         return ThriftUtils.getIdMap(getProjectsById(projectIdsToLoad, user));
     }
 
-    private Map<String, Release> preloadLinkedReleases(Map<String, Project> projectMap, User user) {
+    private Map<String, Release> preloadLinkedReleases(Map<String, Project> projectMap) {
         Set<String> releaseIdsToLoad = projectMap
                 .values()
                 .stream()
@@ -308,13 +299,13 @@ public class ProjectDatabaseHandler {
                 .flatMap(Set::stream)
                 .collect(Collectors.toSet());
 
-        return ThriftUtils.getIdMap(componentDatabaseHandler.getFullReleases(releaseIdsToLoad, user));
+        return ThriftUtils.getIdMap(componentDatabaseHandler.getFullReleases(releaseIdsToLoad));
     }
 
-    public List<ProjectLink> getLinkedProjects(Map<String, ProjectRelationship> relations, User user) {
+    public List<ProjectLink> getLinkedProjects(Map<String, ProjectRelationship> relations) {
         List<ProjectLink> out;
         final Map<String, Project> projectMap = ThriftUtils.getIdMap(repository.getAll());
-        final Map<String, Release> releaseMap = preloadLinkedReleases(projectMap, user);
+        final Map<String, Release> releaseMap = preloadLinkedReleases(projectMap);
 
         Deque<String> visitedIds = new ArrayDeque<>();
         out = iterateProjectRelationShips(relations, null, visitedIds, projectMap, releaseMap, -1);
@@ -476,6 +467,80 @@ public class ProjectDatabaseHandler {
             }
         }
         return projects;
+    }
+
+    public List<ReleaseClearingStatusData> getReleaseClearingStatuses(String projectId, User user) throws SW360Exception {
+        Project project = getProjectById(projectId, user);
+        SetMultimap<String, ProjectWithReleaseRelationTuple> releaseIdsToProject = releaseIdToProjects(project, user);
+        List<Release> releasesById = componentDatabaseHandler.getFullReleases(releaseIdsToProject.keySet());
+        Map<String, Component> componentsById = ThriftUtils.getIdMap(
+                componentDatabaseHandler.getComponentsShort(
+                        releasesById.stream().map(Release::getComponentId).collect(Collectors.toSet())));
+
+        List<ReleaseClearingStatusData> releaseClearingStatuses = new ArrayList<>();
+        for (Release release : releasesById) {
+            List<String> projectNames = new ArrayList<>();
+            List<String> mainlineStates = new ArrayList<>();
+
+            for (ProjectWithReleaseRelationTuple projectWithReleaseRelation : releaseIdsToProject.get(release.getId())) {
+                projectNames.add(printName(projectWithReleaseRelation.getProject()));
+                mainlineStates.add(ThriftEnumUtils.enumToString(projectWithReleaseRelation.getRelation().getMainlineState()));
+                if (projectNames.size() > 3) {
+                    projectNames.add("...");
+                    mainlineStates.add("...");
+                    break;
+                }
+
+            }
+            releaseClearingStatuses.add(new ReleaseClearingStatusData(release)
+                    .setProjectNames(joinStrings(projectNames))
+                    .setMainlineStates(joinStrings(mainlineStates))
+                    .setComponentType(componentsById.get(release.getComponentId()).getComponentType()));
+        }
+        return releaseClearingStatuses;
+    }
+
+    SetMultimap<String, ProjectWithReleaseRelationTuple> releaseIdToProjects(Project project, User user) throws SW360Exception {
+        Set<String> visitedProjectIds = new HashSet<>();
+        SetMultimap<String, ProjectWithReleaseRelationTuple> releaseIdToProjects = HashMultimap.create();
+
+        releaseIdToProjects(project, user, visitedProjectIds, releaseIdToProjects);
+        return releaseIdToProjects;
+    }
+
+    private void releaseIdToProjects(Project project, User user, Set<String> visitedProjectIds, Multimap<String, ProjectWithReleaseRelationTuple> releaseIdToProjects) throws SW360Exception {
+
+        if (nothingTodo(project, visitedProjectIds)) return;
+
+        nullToEmptyMap(project.getReleaseIdToUsage()).forEach((releaseId, relation) -> {
+            releaseIdToProjects.put(releaseId, new ProjectWithReleaseRelationTuple(project, relation));
+        });
+
+        Map<String, ProjectRelationship> linkedProjects = project.getLinkedProjects();
+        if (linkedProjects != null) {
+
+                for (String projectId : linkedProjects.keySet()) {
+                    if (visitedProjectIds.contains(projectId)) continue;
+
+                    Project linkedProject = getProjectById(projectId, user);
+                    releaseIdToProjects(linkedProject, user, visitedProjectIds, releaseIdToProjects);
+                }
+        }
+    }
+
+    private boolean nothingTodo(Project project, Set<String> visitedProjectIds) {
+        if (project == null) {
+            return true;
+        }
+        return alreadyBeenHere(project.getId(), visitedProjectIds);
+    }
+
+    private boolean alreadyBeenHere(String id, Set<String> visitedProjectIds) {
+        if (visitedProjectIds.contains(id)) {
+            return true;
+        }
+        visitedProjectIds.add(id);
+        return false;
     }
 
     public List<Project> fillClearingStateSummaryIncludingSubprojects(List<Project> projects, User user) {

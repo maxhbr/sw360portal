@@ -11,16 +11,18 @@
 package org.eclipse.sw360.portal.portlets.projects;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.liferay.portal.kernel.exception.PortalException;
-import com.liferay.portal.kernel.exception.SystemException;
-import com.liferay.portlet.expando.model.ExpandoBridge;
-import org.apache.log4j.Logger;
+import org.eclipse.sw360.datahandler.common.CommonUtils;
 import org.eclipse.sw360.datahandler.common.SW360Utils;
 import org.eclipse.sw360.datahandler.thrift.MainlineState;
 import org.eclipse.sw360.datahandler.thrift.ProjectReleaseRelationship;
 import org.eclipse.sw360.datahandler.thrift.ReleaseRelationship;
+import org.eclipse.sw360.datahandler.thrift.Source;
+import org.eclipse.sw360.datahandler.thrift.attachments.AttachmentUsage;
+import org.eclipse.sw360.datahandler.thrift.attachments.LicenseInfoUsage;
+import org.eclipse.sw360.datahandler.thrift.attachments.UsageData;
 import org.eclipse.sw360.datahandler.thrift.components.ReleaseLink;
 import org.eclipse.sw360.datahandler.thrift.licenseinfo.LicenseNameWithText;
 import org.eclipse.sw360.datahandler.thrift.projects.Project;
@@ -30,18 +32,17 @@ import org.eclipse.sw360.datahandler.thrift.users.User;
 import org.eclipse.sw360.datahandler.thrift.vulnerabilities.ProjectVulnerabilityRating;
 import org.eclipse.sw360.datahandler.thrift.vulnerabilities.VulnerabilityCheckStatus;
 import org.eclipse.sw360.datahandler.thrift.vulnerabilities.VulnerabilityRatingForProject;
+import org.eclipse.sw360.portal.common.CustomFieldHelper;
 import org.eclipse.sw360.portal.common.PortalConstants;
 import org.eclipse.sw360.portal.common.PortletUtils;
 import org.eclipse.sw360.portal.users.UserCacheHolder;
 
 import javax.portlet.PortletRequest;
 import javax.portlet.ResourceRequest;
-
 import java.util.*;
 import java.util.stream.Collectors;
 
 import static org.eclipse.sw360.portal.common.PortalConstants.CUSTOM_FIELD_PROJECT_GROUP_FILTER;
-import static org.eclipse.sw360.portal.common.PortletUtils.getUserExpandoBridge;
 
 /**
  * Component portlet implementation
@@ -51,8 +52,6 @@ import static org.eclipse.sw360.portal.common.PortletUtils.getUserExpandoBridge;
  * @author alex.borodin@evosoft.com
  */
 public class ProjectPortletUtils {
-
-    private static final Logger log = Logger.getLogger(ProjectPortletUtils.class);
 
     private ProjectPortletUtils() {
         // Utility class with only static functions
@@ -153,23 +152,12 @@ public class ProjectPortletUtils {
                 .setVulnerabilityRating(vulnerabilityRatingForProject);
     }
 
-    public static void saveStickyProjectGroup(PortletRequest request, User user, String groupFilterValue) {
-        try {
-            ExpandoBridge exp = getUserExpandoBridge(request, user);
-            exp.setAttribute(CUSTOM_FIELD_PROJECT_GROUP_FILTER, groupFilterValue);
-        } catch (PortalException | SystemException e) {
-            log.warn("Could not save sticky project group to custom field", e);
-        }
+    static void saveStickyProjectGroup(PortletRequest request, User user, String groupFilterValue) {
+        CustomFieldHelper.saveField(request, user, CUSTOM_FIELD_PROJECT_GROUP_FILTER, groupFilterValue);
     }
 
-    public static String loadStickyProjectGroup(PortletRequest request, User user) {
-        try {
-            ExpandoBridge exp = getUserExpandoBridge(request, user);
-            return (String) exp.getAttribute(CUSTOM_FIELD_PROJECT_GROUP_FILTER);
-        } catch (PortalException | SystemException e) {
-            log.error("Could not load sticky project group from custom field", e);
-            return null;
-        }
+    static String loadStickyProjectGroup(PortletRequest request, User user) {
+        return CustomFieldHelper.loadField(String.class, request, user, CUSTOM_FIELD_PROJECT_GROUP_FILTER).orElse(null);
     }
 
     public static Map<String, Set<String>> getSelectedReleaseAndAttachmentIdsFromRequest(ResourceRequest request) {
@@ -249,5 +237,53 @@ public class ProjectPortletUtils {
         }
 
         return excludedLicenses;
+    }
+
+    public static List<AttachmentUsage> makeAttachmentUsages(Project project, Map<String, Set<String>> selectedReleaseAndAttachmentIds,
+            Map<String, Set<LicenseNameWithText>> excludedLicensesPerAttachmentId) {
+        List<AttachmentUsage> attachmentUsages = Lists.newArrayList();
+
+        for(String releaseId : selectedReleaseAndAttachmentIds.keySet()) {
+            for(String attachmentContentId : selectedReleaseAndAttachmentIds.get(releaseId)) {
+                AttachmentUsage usage = new AttachmentUsage();
+                usage.setUsedBy(Source.projectId(project.getId()));
+                usage.setOwner(Source.releaseId(releaseId));
+                usage.setAttachmentContentId(attachmentContentId);
+
+                Set<String> licenseIds = CommonUtils.nullToEmptySet(excludedLicensesPerAttachmentId.get(attachmentContentId)).stream()
+                        .filter(licenseNameWithText -> licenseNameWithText.isSetLicenseName())
+                        .map(licenseNameWithText -> licenseNameWithText.getLicenseName()).collect(Collectors.toSet());
+                usage.setUsageData(UsageData.licenseInfo(new LicenseInfoUsage(licenseIds)));
+
+                attachmentUsages.add(usage);
+            }
+        }
+
+        return attachmentUsages;
+    }
+
+    /**
+     * Walks through a list of project links and extracts all release attachments
+     * with their owner. The returned map is a mapping from a release to its
+     * attachment content ids.
+     *
+     * @param projectLinks
+     *            list of project links to walk through
+     *
+     * @return map of releases and their attachment content ids
+     */
+    public static Map<Source, Set<String>> extractContainedAttachments(Collection<ProjectLink> projectLinks) {
+        Map<Source, Set<String>> attachments = Maps.newHashMap();
+
+        for (ProjectLink projectLink : projectLinks) {
+            for (ReleaseLink releaseLink : projectLink.linkedReleases) {
+                Set<String> attachmentIds = attachments.getOrDefault(Source.releaseId(releaseLink.getId()), Sets.newHashSet());
+                attachmentIds
+                        .addAll(releaseLink.getAttachments().stream().map(a -> a.getAttachmentContentId()).collect(Collectors.toList()));
+                attachments.put(Source.releaseId(releaseLink.getId()), attachmentIds);
+            }
+        }
+
+        return attachments;
     }
 }

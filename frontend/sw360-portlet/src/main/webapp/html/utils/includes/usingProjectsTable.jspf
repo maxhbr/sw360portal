@@ -12,7 +12,7 @@
 
 <core_rt:if test="${usingProjects != null  && usingProjects.size()>0}">
     <div id="usingProjectsTableDiv">
-        <table id="usingProjectsTable" title="Usage overview" class="table info_table">
+        <table id="usingProjectsTable" class="table info_table">
                 <thead>
                 <tr>
                     <th colspan="3">${documentName} is used by the following projects</th>
@@ -25,9 +25,14 @@
     </div>
 
     <script>
-          var usingProjectsTable;
+        require(['jquery', /* jquery-plugins */ 'datatables'], function ($) {
+            var usingProjectsTable;
 
-          function createUsingProjectsTable() {
+            $( window ).on( "load", function() {
+                createUsingProjectsTable();
+            });
+
+            function createUsingProjectsTable() {
                 var result = [];
 
                 <core_rt:forEach items="${usingProjects}" var="project">
@@ -46,11 +51,7 @@
                     "lengthChange": false,
                     "autoWidth": false
                 });
-          }
-
-          $( window ).on( "load", function() {
-              createUsingProjectsTable();
-          });
-
+            }
+        });
     </script>
 </core_rt:if>

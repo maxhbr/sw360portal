@@ -1,5 +1,5 @@
 <%--
-  ~ Copyright Siemens AG, 2013-2016. Part of the SW360 Portal Project.
+  ~ Copyright Siemens AG, 2013-2017. Part of the SW360 Portal Project.
   ~
   ~ SPDX-License-Identifier: EPL-1.0
   ~
@@ -12,7 +12,7 @@
 <%@include file="/html/utils/includes/fossologyClearing.jspf"%>
 
 <core_rt:set var="clearingInfo" value="${release.clearingInformation}"/>
-<table class="table info_table" id="ReleaseClearingOverview" title="Release clearing overview">
+<table class="table info_table" id="ReleaseClearingOverview">
     <thead>
     <tr>
         <th colspan="2">Clearing Details: <sw360:ReleaseName release="${release}" /></th>
@@ -24,8 +24,8 @@
             <sw360:DisplayEnum value="${release.clearingState}"/>
             &nbsp;
             <span id='releaseAction${release.id}'>
-                <img src='<%=request.getContextPath()%>/images/fossology-logo-24.gif'
-                     onclick='openSelectClearingDialog("fossologySending${release.id}","${release.id}")'
+                <img class="action send-to-fossology" src='<%=request.getContextPath()%>/images/fossology-logo-24.gif'
+                     data-release-id="${release.id}"
                      alt='Send to FOSSology'
                      title='Send to FOSSology'>
                 <span id='fossologySending${release.id}'></span>
@@ -105,7 +105,7 @@
     <tr>
         <td>Clearing Standard:</td>
         <td><sw360:out value="${clearingInfo.clearingStandard}"/></td>
-    </tr> 
+    </tr>
     <tr>
         <td>External URL:</td>
         <td><sw360:DisplayLink target="${clearingInfo.externalUrl}"/></td>
@@ -116,7 +116,7 @@
     </tr>
 </table>
 
-<table class="table info_table" id="RequestInfo" title="Request Information">
+<table class="table info_table" id="RequestInfo">
     <thead>
     <tr>
         <th colspan="2">Request Information</th>
@@ -141,7 +141,7 @@
     </tr>
 </table>
 
-<table class="table info_table" id="ReleaseSupplementalInfo" title="Release Supplemental Information">
+<table class="table info_table" id="ReleaseSupplementalInfo">
     <thead>
     <tr>
         <th colspan="2">Supplemental Information</th>
@@ -157,4 +157,14 @@
     </tr>
 </table>
 
-
+<script type="text/javascript">
+    require(['jquery', 'utils/includes/fossologyClearing'], function ($, fossology) {
+        $(window).load(function () {
+            fossology.initialize();
+        });
+        $('#ReleaseClearingOverview').on('click', '.action.send-to-fossology', function(event) {
+            var data = $(event.currentTarget).data();
+            fossology.openSelectClearingDialog('fossologySending', data.releaseId);
+        });
+    });
+</script>

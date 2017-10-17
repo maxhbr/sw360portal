@@ -18,6 +18,7 @@ import org.eclipse.sw360.datahandler.db.ProjectSearchHandler;
 import org.eclipse.sw360.datahandler.thrift.AddDocumentRequestSummary;
 import org.eclipse.sw360.datahandler.thrift.RequestStatus;
 import org.eclipse.sw360.datahandler.thrift.attachments.Attachment;
+import org.eclipse.sw360.datahandler.thrift.components.ReleaseClearingStatusData;
 import org.eclipse.sw360.datahandler.thrift.projects.Project;
 import org.eclipse.sw360.datahandler.thrift.projects.ProjectLink;
 import org.eclipse.sw360.datahandler.thrift.projects.ProjectRelationship;
@@ -46,7 +47,7 @@ public class ProjectHandler implements ProjectService.Iface {
 
     ProjectHandler() throws IOException {
         handler = new ProjectDatabaseHandler(DatabaseSettings.getConfiguredHttpClient(), DatabaseSettings.COUCH_DB_DATABASE, DatabaseSettings.COUCH_DB_ATTACHMENTS);
-        searchHandler = new ProjectSearchHandler(DatabaseSettings.getConfiguredHttpClient(),DatabaseSettings.COUCH_DB_DATABASE);
+        searchHandler = new ProjectSearchHandler(DatabaseSettings.getConfiguredHttpClient(), DatabaseSettings.COUCH_DB_DATABASE);
     }
 
     /////////////////////
@@ -55,7 +56,7 @@ public class ProjectHandler implements ProjectService.Iface {
 
 
     @Override
-    public List<Project> refineSearch(String text, Map<String, Set<String>> subQueryRestrictions,User user) throws TException {
+    public List<Project> refineSearch(String text, Map<String, Set<String>> subQueryRestrictions, User user) throws TException {
         return searchHandler.search(text, subQueryRestrictions, user);
     }
 
@@ -124,7 +125,7 @@ public class ProjectHandler implements ProjectService.Iface {
     public List<Project> getProjectsById(List<String> id, User user) throws TException {
         assertUser(user);
         assertNotNull(id);
-        return handler.getProjectsById(id,user);
+        return handler.getProjectsById(id, user);
     }
 
     @Override
@@ -164,7 +165,7 @@ public class ProjectHandler implements ProjectService.Iface {
         return handler.updateProject(project, user);
     }
 
-    public RequestStatus updateProjectFromModerationRequest(Project projectAdditions, Project projectDeletions, User user){
+    public RequestStatus updateProjectFromModerationRequest(Project projectAdditions, Project projectDeletions, User user) {
         return handler.updateProjectFromAdditionsAndDeletions(projectAdditions, projectDeletions, user);
     }
 
@@ -202,8 +203,9 @@ public class ProjectHandler implements ProjectService.Iface {
     @Override
     public List<ProjectLink> getLinkedProjects(Map<String, ProjectRelationship> relations, User user) throws TException {
         assertNotNull(relations);
+        assertUser(user);
 
-        return handler.getLinkedProjects(relations, user);
+        return handler.getLinkedProjects(relations);
     }
 
     @Override
@@ -220,6 +222,11 @@ public class ProjectHandler implements ProjectService.Iface {
     public List<Project> fillClearingStateSummaryIncludingSubprojects(List<Project> projects, User user)
             throws TException {
         return handler.fillClearingStateSummaryIncludingSubprojects(projects, user);
+    }
+
+    @Override
+    public List<ReleaseClearingStatusData> getReleaseClearingStatuses(String projectId, User user) throws TException {
+        return handler.getReleaseClearingStatuses(projectId, user);
     }
 
     @Override
